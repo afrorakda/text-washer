@@ -41,59 +41,80 @@
         h1 { font-size: 2rem; font-weight: 800; margin-bottom: 8px; letter-spacing: -1px; }
         .subtitle { font-size: 1rem; color: var(--text-gray); font-weight: 600; margin-bottom: 30px; }
 
-        .input-group { position: relative; margin-bottom: 20px; text-align: left; }
+        .input-wrapper { position: relative; margin-bottom: 20px; text-align: left; }
         
-        textarea {
+        #editor {
             width: 100%;
-            height: 280px;
+            height: 250px;
             padding: 20px;
-            padding-right: 45px;
             border: 2px solid var(--accent);
             border-radius: var(--radius);
             background: var(--input-bg);
             font-size: 1rem;
             line-height: 1.6;
-            font-weight: 600;
-            color: var(--main) !important;
+            color: var(--main);
             box-sizing: border-box;
             outline: none;
-            resize: none;
+            overflow-y: auto;
+            word-break: break-all;
             /* iOS Style Reset */
             -webkit-appearance: none;
-            -webkit-text-fill-color: var(--main) !important;
             opacity: 1 !important;
         }
-        textarea::placeholder { color: var(--placeholder); -webkit-text-fill-color: var(--placeholder); }
+
+        #editor:empty:before {
+            content: attr(data-placeholder);
+            color: var(--placeholder);
+        }
 
         .clear-btn {
             position: absolute;
             right: 15px;
             top: 15px;
-            background: none;
+            background: rgba(255,255,255,0.9);
             border: none;
             color: #888;
             font-size: 1.4rem;
             font-weight: 800;
             cursor: pointer;
+            width: 32px; height: 32px; border-radius: 50%;
             display: none;
+            align-items: center; justify-content: center;
             z-index: 2;
         }
-        .clear-btn.active { display: block; }
+        .clear-btn.active { display: flex; }
 
-        .action-btn {
-            width: 100%;
+        /* 実績表示エリア */
+        .stats-card {
             background: var(--main);
             color: #fff;
-            border: none;
             padding: 20px;
             border-radius: var(--radius);
-            font-size: 1.2rem;
-            font-weight: 800;
-            cursor: pointer;
             margin-bottom: 25px;
-            transition: transform 0.1s, opacity 0.1s;
+            display: none;
+            text-align: left;
+            position: relative;
         }
-        .action-btn:active { opacity: 0.8; transform: scale(0.98); }
+        .stats-card.active { display: block; animation: pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes pop { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+
+        .stats-main { font-size: 1.8rem; font-weight: 900; margin-bottom: 5px; }
+        .stats-sub { font-size: 0.85rem; font-weight: 600; opacity: 0.8; }
+        
+        .copy-btn {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #fff;
+            color: var(--main);
+            border: none;
+            padding: 10px 18px;
+            border-radius: 10px;
+            font-weight: 800;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
 
         #toast {
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
@@ -130,18 +151,22 @@
 </head>
 <body>
 
-<div id="toast">Copied!</div>
+<div id="toast">Washed & Copied!</div>
 
 <div class="container">
     <h1>Text Washer</h1>
-    <p class="subtitle">Strip all invisible formatting instantly.</p>
+    <p class="subtitle">Paste rich text. Get it clean instantly.</p>
 
-    <div class="input-group">
-        <textarea id="input" placeholder="Paste rich text here..." oninput="checkClear()"></textarea>
+    <div class="input-wrapper">
+        <div id="editor" contenteditable="true" data-placeholder="Paste anything here..." oninput="checkInput()"></div>
         <button class="clear-btn" id="clr-btn" onclick="clearAll()">×</button>
     </div>
 
-    <button class="action-btn" onclick="washAndCopy()">Wash & Copy</button>
+    <div class="stats-card" id="statsCard">
+        <div class="stats-main" id="statsMain">-0%</div>
+        <div class="stats-sub" id="statsSub">Tags: 0 stripped</div>
+        <button class="copy-btn" onclick="manualCopy()">Copy</button>
+    </div>
 
     <div class="footer-btns">
         <a href="https://ko-fi.com/afrorakda" target="_blank" class="kofi-btn">☕️buy me a coffee</a>
@@ -165,49 +190,85 @@
 </div>
 
 <script>
-    const input = document.getElementById('input');
+    const editor = document.getElementById('editor');
     const clrBtn = document.getElementById('clr-btn');
+    const statsCard = document.getElementById('statsCard');
+    const statsMain = document.getElementById('statsMain');
+    const statsSub = document.getElementById('statsSub');
     const toast = document.getElementById('toast');
 
-    function checkClear() {
-        clrBtn.classList.toggle('active', input.value !== '');
+    // ペーストイベントを監視（貼り付けた瞬間に洗浄）
+    editor.addEventListener('paste', (e) => {
+        // デフォルトの貼り付けを一旦停止（生データ解析のため）
+        e.preventDefault();
+        
+        const html = e.clipboardData.getData('text/html') || "";
+        const plain = e.clipboardData.getData('text/plain') || "";
+
+        // 洗浄実行
+        processWash(html, plain);
+    });
+
+    function processWash(html, plain) {
+        if (!plain && !html) return;
+
+        // 文字数（バイト数簡易計算）の比較
+        // HTMLがある場合はその長さをRaw、なければPlainをRawとする
+        const rawSize = html.length || plain.length;
+        const cleanSize = plain.length;
+        
+        // 削減率の計算
+        const diff = rawSize - cleanSize;
+        const percent = rawSize > 0 ? Math.round((diff / rawSize) * 100) : 0;
+
+        // 削除されたタグの推定（雑に正規表現でカウント）
+        const tagCount = (html.match(/<[^>]*>/g) || []).length;
+
+        // 画面更新
+        editor.innerText = plain;
+        
+        // 実績表示（バーンと見せる）
+        statsMain.innerText = `-${percent}% Cleaned`;
+        statsSub.innerText = `Raw: ${rawSize}B → Clean: ${cleanSize}B / Tags: ${tagCount} stripped`;
+        statsCard.classList.add('active');
+        clrBtn.classList.add('active');
+
+        // 自動コピー
+        copyToClipboard(plain);
     }
 
-    async function washAndCopy() {
-        const val = input.value;
-        if (!val) return;
+    function checkInput() {
+        // 直接入力された場合も一応クリアボタンだけ制御
+        clrBtn.classList.toggle('active', editor.innerText.trim() !== '');
+        if (editor.innerText.trim() === '') statsCard.classList.remove('active');
+    }
 
-        // 1. HTMLタグや実体参照を完全に除去してプレーンテキスト化
-        const tempDiv = document.createElement("div");
-        tempDiv.innerHTML = val;
-        const cleanText = tempDiv.textContent || tempDiv.innerText || "";
-
+    async function copyToClipboard(text) {
         try {
-            // 2. クリップボードへ「書式なし」で書き込み
-            await navigator.clipboard.writeText(cleanText);
-            
-            // 3. 視覚的フィードバックとしてtextareaの中身も洗浄
-            input.value = cleanText;
+            await navigator.clipboard.writeText(text);
             showToast('Washed & Copied!');
         } catch (err) {
-            // フォールバック
-            input.value = cleanText;
-            input.select();
-            document.execCommand('copy');
-            showToast('Washed & Copied!');
+            // 自動コピー失敗時はトーストを出さない（ユーザーに手動ボタンを押させる）
         }
     }
 
+    function manualCopy() {
+        const text = editor.innerText;
+        copyToClipboard(text);
+        showToast('Copied!');
+    }
+
     function clearAll() {
-        input.value = '';
-        checkClear();
-        input.focus();
+        editor.innerHTML = '';
+        statsCard.classList.remove('active');
+        clrBtn.classList.remove('active');
+        editor.focus();
     }
 
     function showToast(msg) {
         toast.innerText = msg;
         toast.style.opacity = '1';
-        setTimeout(() => toast.style.opacity = '0', 1500);
+        setTimeout(() => toast.style.opacity = '0', 2000);
     }
 
     function showModal() { document.getElementById('modal').style.display = 'flex'; }
