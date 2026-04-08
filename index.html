@@ -136,7 +136,7 @@
     <p class="subtitle">Strip all formatting and links instantly.</p>
 
     <div class="input-group">
-        <textarea id="input" placeholder="Paste rich text here..." oninput="washText()"></textarea>
+        <textarea id="input" placeholder="Paste rich text or HTML here..." oninput="handleInput()"></textarea>
         <button class="clear-btn" id="clr-btn" onclick="clearAll()">×</button>
     </div>
 
@@ -168,26 +168,35 @@
     const clrBtn = document.getElementById('clr-btn');
     const toast = document.getElementById('toast');
 
-    function washText() {
-        // 入力された文字列を取得し、プレーンテキストとして再セット
-        // textareaにペーストされた時点でブラウザがプレーン化することもありますが、
-        // 明示的に不要な改行コードの正規化などを行います。
-        let val = input.value;
-        clrBtn.classList.toggle('active', val !== '');
+    // 入力時の処理（クリアボタンの制御のみ）
+    function handleInput() {
+        clrBtn.classList.toggle('active', input.value !== '');
+    }
+
+    // HTMLタグを除去するコア関数
+    function stripHtml(html) {
+        // DOMParserを使ってHTMLとして解析
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        // body要素内のプレーンテキストのみを返す
+        return doc.body.textContent || "";
     }
 
     async function copyResult() {
         if (!input.value) return;
+
+        // 入力されたテキストからHTMLタグを除去（洗浄）
+        const cleanedText = stripHtml(input.value);
         
         try {
-            // クリップボードに書式なしテキストとして保存
-            await navigator.clipboard.writeText(input.value);
-            showToast('Copied!');
+            // 洗浄後のプレーンテキストをクリップボードに保存
+            await navigator.clipboard.writeText(cleanedText);
+            showToast('Cleaned & Copied!');
         } catch (err) {
-            // フォールバック
+            // フォールバック（完全なプレーンテキスト化はブラウザの挙動に依存）
+            input.value = cleanedText;
             input.select();
             document.execCommand('copy');
-            showToast('Copied!');
+            showToast('Cleaned & Copied!');
         }
     }
 
