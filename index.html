@@ -45,7 +45,7 @@
         
         textarea {
             width: 100%;
-            height: 250px;
+            height: 280px;
             padding: 20px;
             padding-right: 45px;
             border: 2px solid var(--accent);
@@ -58,6 +58,7 @@
             box-sizing: border-box;
             outline: none;
             resize: none;
+            /* iOS Style Reset */
             -webkit-appearance: none;
             -webkit-text-fill-color: var(--main) !important;
             opacity: 1 !important;
@@ -84,13 +85,13 @@
             background: var(--main);
             color: #fff;
             border: none;
-            padding: 18px;
+            padding: 20px;
             border-radius: var(--radius);
-            font-size: 1.1rem;
+            font-size: 1.2rem;
             font-weight: 800;
             cursor: pointer;
-            margin-bottom: 20px;
-            transition: opacity 0.2s;
+            margin-bottom: 25px;
+            transition: transform 0.1s, opacity 0.1s;
         }
         .action-btn:active { opacity: 0.8; transform: scale(0.98); }
 
@@ -101,7 +102,7 @@
             opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 1000;
         }
 
-        footer { margin-top: 60px; font-size: 12px; color: #777; line-height: 1.8; font-weight: 500; }
+        footer { margin-top: 50px; font-size: 12px; color: #777; line-height: 1.8; font-weight: 500; }
         footer a { color: inherit; text-decoration: underline; }
         .footer-btns { margin-top: 30px; }
         
@@ -111,7 +112,7 @@
             text-decoration: none; font-weight: bold; font-size: 15px; margin-bottom: 15px;
         }
         .home-btn {
-            display: block; width: 70%; margin: 0 auto; background: var(--accent);
+            display: block; width: 75%; margin: 0 auto; background: var(--accent);
             color: var(--main); border: none; padding: 12px;
             border-radius: var(--radius); font-weight: 800; font-size: 14px; cursor: pointer;
         }
@@ -133,14 +134,14 @@
 
 <div class="container">
     <h1>Text Washer</h1>
-    <p class="subtitle">Strip all formatting and links instantly.</p>
+    <p class="subtitle">Strip all invisible formatting instantly.</p>
 
     <div class="input-group">
-        <textarea id="input" placeholder="Paste rich text or HTML here..." oninput="handleInput()"></textarea>
+        <textarea id="input" placeholder="Paste rich text here..." oninput="checkClear()"></textarea>
         <button class="clear-btn" id="clr-btn" onclick="clearAll()">×</button>
     </div>
 
-    <button class="action-btn" onclick="copyResult()">Copy Clean Text</button>
+    <button class="action-btn" onclick="washAndCopy()">Wash & Copy</button>
 
     <div class="footer-btns">
         <a href="https://ko-fi.com/afrorakda" target="_blank" class="kofi-btn">☕️buy me a coffee</a>
@@ -168,41 +169,38 @@
     const clrBtn = document.getElementById('clr-btn');
     const toast = document.getElementById('toast');
 
-    // 入力時の処理（クリアボタンの制御のみ）
-    function handleInput() {
+    function checkClear() {
         clrBtn.classList.toggle('active', input.value !== '');
     }
 
-    // HTMLタグを除去するコア関数
-    function stripHtml(html) {
-        // DOMParserを使ってHTMLとして解析
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        // body要素内のプレーンテキストのみを返す
-        return doc.body.textContent || "";
-    }
+    async function washAndCopy() {
+        const val = input.value;
+        if (!val) return;
 
-    async function copyResult() {
-        if (!input.value) return;
+        // 1. HTMLタグや実体参照を完全に除去してプレーンテキスト化
+        const tempDiv = document.createElement("div");
+        tempDiv.innerHTML = val;
+        const cleanText = tempDiv.textContent || tempDiv.innerText || "";
 
-        // 入力されたテキストからHTMLタグを除去（洗浄）
-        const cleanedText = stripHtml(input.value);
-        
         try {
-            // 洗浄後のプレーンテキストをクリップボードに保存
-            await navigator.clipboard.writeText(cleanedText);
-            showToast('Cleaned & Copied!');
+            // 2. クリップボードへ「書式なし」で書き込み
+            await navigator.clipboard.writeText(cleanText);
+            
+            // 3. 視覚的フィードバックとしてtextareaの中身も洗浄
+            input.value = cleanText;
+            showToast('Washed & Copied!');
         } catch (err) {
-            // フォールバック（完全なプレーンテキスト化はブラウザの挙動に依存）
-            input.value = cleanedText;
+            // フォールバック
+            input.value = cleanText;
             input.select();
             document.execCommand('copy');
-            showToast('Cleaned & Copied!');
+            showToast('Washed & Copied!');
         }
     }
 
     function clearAll() {
         input.value = '';
-        clrBtn.classList.remove('active');
+        checkClear();
         input.focus();
     }
 
